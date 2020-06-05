@@ -13,6 +13,19 @@
 #include <wavTrigger.h>
 #include <Wire.h> // Include the I2C library (required)
 
+const uint8_t TM_LIFT[] = {
+  SEG_D | SEG_E | SEG_F,   //l
+  SEG_E | SEG_F, //i
+  SEG_A | SEG_E | SEG_F | SEG_G,//f
+  SEG_D | SEG_E | SEG_F | SEG_G//t
+  };
+
+  const uint8_t TM_OFF[] = {
+SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,  //o
+  SEG_A | SEG_E | SEG_F | SEG_G,//f
+  SEG_A | SEG_E | SEG_F | SEG_G,//f
+  SEG_G};
+
 unsigned long MasterTIMEOUT = 0;
 const unsigned long TIMEOUTTIME = 60000;
 int TIMEOUTISON = 0;
@@ -117,6 +130,22 @@ unsigned long CapButLeftlastDebounce = 0;
 unsigned long CapButRightlastDebounce = 0;
 unsigned long CapButdebounceDelay = 200;
 
+//Rocket Vars
+// modes
+// 1 - Scene - star trek
+// 2- backgeound set, play offcie and bleeps on loop
+// 3 - Awaiting input
+// 4 - launch and rocket back noise ( cancel control room noise
+// 5- awaiting input
+// 6 - play final tune (turn off background)
+// 7 - await input reset
+unsigned long RocketMode = 0;
+unsigned long RocketButtonFlash = 0;
+unsigned long RocketrandNumber = 0;
+unsigned long RocketFlashMillies = 0;
+const int RocketSteps[] = {187, 188, 189, 190, 191, 196, 193, 194, 195, 192, 197, 198, 199, 200, 201};
+unsigned long RocketCurrentStep = 0;
+int RocketFlashTakeoffStep = 1;
 
 const int MenuControlPins[] = {47, 37, 41, 49, 45, 51, 43, 39};
 
@@ -285,7 +314,7 @@ void setup() {
   lcd.begin();
   lcd.print(CurrentLCDText);
 
-  Startup();
+  Startup();// UNCOMMENT
   MasterButtonBlock = 0; //Ready for standard use (scenes are auto blocking anyway)
 
 
@@ -309,6 +338,11 @@ void loop() {
 
   if (FM_GameON == 1 && TIMEOUTISON != 1) {
     FM_Ticker();
+  }
+
+  //deal with button flash loop
+  if (CurrentMenuControl == 7 && RocketButtonFlash == 1) {
+    RocketFlashyFlash();
   }
 
 
@@ -483,6 +517,7 @@ ButtonData ButtonEvent(ButtonData ReturnButons) { //All Input Events
   if (Easter1On != 1 && AdminMode != 1) {
     //menu Handler
     if (ReturnButons.ControlBlock == 7) {
+      wTrig.stopAllTracks(); // not sure
       wTrig.trackPlayPoly(14);//ping
       CurrentMenuControl = ReturnButons.State;
       switch ( CurrentMenuControl ) {
@@ -517,6 +552,15 @@ ButtonData ButtonEvent(ButtonData ReturnButons) { //All Input Events
         case 6 :
           lcd.clear();
           lcd.print("   The Wiggles  ");
+          break;
+        case 7 :
+          lcd.clear();
+          lcd.print("     Rocket     ");
+          Serial.print("in 7");
+          RocketMode = 0;
+          RocketButtonFlash = 0;
+          RocketCurrentStep = 0;
+
           break;
         default:
           lcd.clear();
@@ -1061,10 +1105,82 @@ ButtonData ButtonEvent(ButtonData ReturnButons) { //All Input Events
 
   ///End Master Game Handlers
 
+  //// -----------GAME SEVEN STARTS -------------
+  //start up sequence
+  //Rocket Vars
+  // modes
+  // 0 - Scene - star trek
+  // 1- backgeound set, play offcie and bleeps on loop
+  // 2 - Awaiting input
+  // 3 - launch and rocket back noise ( cancel control room noise
+  // 4- awaiting input
+  // 5 - play final tune (turn off background)
+  // 6 - await input reset
+
+  // const int RocketSteps[] ={187,188,189,190,191,192,193,194,195,196,197,198,199,200,201};
+  //unsigned long RocketCurrentStep =0;
+
+
+  if (CurrentMenuControl == 7) {
+    //decode input into action codes
+    Serial.print("in 7");
+    //are we in startup moder
+    if  (RocketMode == 0) {
+      RocketMode0();
+    }
+    if  (RocketMode == 1) {
+      RocketMode1();
+    }
+
+    if (RocketMode == 2) { //in sample payout mode
+
+      if (ReturnButons.ControlBlock == 1 || ReturnButons.ControlBlock == 2 ||  ReturnButons.ControlBlock == 3 ||  ReturnButons.ControlBlock == 4 ||  ReturnButons.ControlBlock == 5 ) { //any button press
+
+        if (RocketCurrentStep != 6 ) {
+          wTrig.trackPlayPoly(RocketSteps[RocketCurrentStep]);
+          RocketCurrentStep++;
+        }
+
+        if (RocketCurrentStep == 6 ) {
+          RocketMode == 3;
+          RocketMode3();
+        }
+
+      }
+
+
+    }
 
 
 
+    if (RocketMode == 4) {
+      if (ReturnButons.ControlBlock == 1 || ReturnButons.ControlBlock == 2 ||  ReturnButons.ControlBlock == 3 ||  ReturnButons.ControlBlock == 4 ||  ReturnButons.ControlBlock == 5 ) { //any button press
+        wTrig.trackPlayPoly(RocketSteps[RocketCurrentStep]);
+        RocketCurrentStep++;
+        if (RocketCurrentStep > 12) {
+          wTrig.stopAllTracks();
+          RocketMode4();
+        }
+      }
+    }
 
+ if (RocketMode == 5) {
+  if (ReturnButons.ControlBlock == 1 || ReturnButons.ControlBlock == 2 ||  ReturnButons.ControlBlock == 3 ||  ReturnButons.ControlBlock == 4 ||  ReturnButons.ControlBlock == 5 ||  ReturnButons.ControlBlock == 6) { //any button press
+    int RocketBleepRand;
+     RocketBleepRand = random(15);
+     
+    int RockerBleepPlay;
+    RockerBleepPlay = 202 +RocketBleepRand ;
+    Serial.print(RockerBleepPlay);
+      wTrig.trackPlayPoly(RockerBleepPlay);  
+  }
+
+ }
+    
+
+  }
+
+  ///----------------GAME Seven END----------------
 
 
   //Easter egg and Admin mode Handler
